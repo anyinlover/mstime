@@ -2,15 +2,21 @@
 // Licensed under the MIT license.
 
 // <ProgramSnippet>
-import * as readline from 'readline-sync';
-import { DeviceCodeInfo } from '@azure/identity';
-import { Message, TodoTaskList } from '@microsoft/microsoft-graph-types';
+import * as readline from "readline-sync";
+import { DeviceCodeInfo } from "@azure/identity";
+import {
+  Message,
+  TodoTaskList,
+  TodoTask,
+  Calendar,
+  Event,
+} from "@microsoft/microsoft-graph-types";
 
-import settings, { AppSettings } from './appSettings';
-import * as graphHelper from './graphHelper';
+import settings, { AppSettings } from "./appSettings";
+import * as graphHelper from "./graphHelper";
 
 async function main() {
-  console.log('TypeScript Graph Tutorial');
+  console.log("TypeScript Graph Tutorial");
 
   let choice = 0;
 
@@ -21,22 +27,27 @@ async function main() {
   await greetUserAsync();
 
   const choices = [
-    'Display access token',
-    'List my inbox',
-    'Send mail',
-    'Make a Graph call',
-    'List my task lists',
+    "Display access token",
+    "List my inbox",
+    "Send mail",
+    "Make a Graph call",
+    "List my task lists",
+    "List my tasks",
+    "List my task",
+    "List my calendars",
+    "List my events",
+    "Add an event",
   ];
 
   while (choice != -1) {
-    choice = readline.keyInSelect(choices, 'Select an option', {
-      cancel: 'Exit',
+    choice = readline.keyInSelect(choices, "Select an option", {
+      cancel: "Exit",
     });
 
     switch (choice) {
       case -1:
         // Exit
-        console.log('Goodbye...');
+        console.log("Goodbye...");
         break;
       case 0:
         // Display access token
@@ -57,8 +68,36 @@ async function main() {
       case 4:
         await listTaskListsAsync();
         break;
+      case 5:
+        await listTasksAsync(
+          "AQMkADAwATM0MDAAMS1hNDAxLTY3NDMtMDACLTAwCgAuAAAD7VyvLT-NU0qZUjzrHbil7AEAvMe3PvoH7EWY6Ys_baveAQAEZrVURwAAAA=="
+        );
+        break;
+      case 6:
+        await displayTaskAsync(
+          "AQMkADAwATM0MDAAMS1hNDAxLTY3NDMtMDACLTAwCgAuAAAD7VyvLT-NU0qZUjzrHbil7AEAvMe3PvoH7EWY6Ys_baveAQAEZrVURwAAAA==",
+          "AQMkADAwATM0MDAAMS1hNDAxLTY3NDMtMDACLTAwCgBGAAAD7VyvLT-NU0qZUjzrHbil7AcAvMe3PvoH7EWY6Ys_baveAQAEZrVURwAAALzHtz76B_xFmOmLPm2r3gEAB4QQwBsAAAA="
+        );
+        break;
+      case 7:
+        await listCalendarsAsync();
+        break;
+      case 8:
+        await listEventsAsync(
+          "AQMkADAwATM0MDAAMS1hNDAxLTY3NDMtMDACLTAwCgBGAAAD7VyvLT-NU0qZUjzrHbil7AcAvMe3PvoH7EWY6Ys_baveAQAAAgEGAAAAvMe3PvoH7EWY6Ys_baveAQAAAjQ8AAAA"
+        );
+        break;
+      case 9:
+        await createEventAsync(
+          "AQMkADAwATM0MDAAMS1hNDAxLTY3NDMtMDACLTAwCgBGAAAD7VyvLT-NU0qZUjzrHbil7AcAvMe3PvoH7EWY6Ys_baveAQAAAgEGAAAAvMe3PvoH7EWY6Ys_baveAQAAAjQ8AAAA",
+          "TEST",
+          "2024-09-13T23:00:00",
+          "2024-09-13T24:00:00",
+          "normal"
+        );
+        break;
       default:
-        console.log('Invalid choice! Please try again.');
+        console.log("Invalid choice! Please try again.");
     }
   }
 }
@@ -85,7 +124,7 @@ async function greetUserAsync() {
     console.log(`Hello, ${user?.displayName}!`);
     // For Work/school accounts, email is in mail property
     // Personal accounts, email is in userPrincipalName
-    console.log(`Email: ${user?.mail ?? user?.userPrincipalName ?? ''}`);
+    console.log(`Email: ${user?.mail ?? user?.userPrincipalName ?? ""}`);
   } catch (err) {
     console.log(`Error getting user: ${err}`);
   }
@@ -111,15 +150,15 @@ async function listInboxAsync() {
 
     // Output each message's details
     for (const message of messages) {
-      console.log(`Message: ${message.subject ?? 'NO SUBJECT'}`);
-      console.log(`  From: ${message.from?.emailAddress?.name ?? 'UNKNOWN'}`);
-      console.log(`  Status: ${message.isRead ? 'Read' : 'Unread'}`);
+      console.log(`Message: ${message.subject ?? "NO SUBJECT"}`);
+      console.log(`  From: ${message.from?.emailAddress?.name ?? "UNKNOWN"}`);
+      console.log(`  Status: ${message.isRead ? "Read" : "Unread"}`);
       console.log(`  Received: ${message.receivedDateTime}`);
     }
 
     // If @odata.nextLink is not undefined, there are more messages
     // available on the server
-    const moreAvailable = messagePage['@odata.nextLink'] != undefined;
+    const moreAvailable = messagePage["@odata.nextLink"] != undefined;
     console.log(`\nMore messages available? ${moreAvailable}`);
   } catch (err) {
     console.log(`Error getting user's inbox: ${err}`);
@@ -141,11 +180,11 @@ async function sendMailAsync() {
     }
 
     await graphHelper.sendMailAsync(
-      'Testing Microsoft Graph',
-      'Hello world!',
-      userEmail,
+      "Testing Microsoft Graph",
+      "Hello world!",
+      userEmail
     );
-    console.log('Mail sent.');
+    console.log("Mail sent.");
   } catch (err) {
     console.log(`Error sending mail: ${err}`);
   }
@@ -177,11 +216,92 @@ async function listTaskListsAsync() {
 
 async function listTasksAsync(taskListID: string) {
   try {
-    const taskListsPage = await graphHelper.getTasksAsync(taskListID);
+    const tasksPage = await graphHelper.getTasksAsync(taskListID);
+    const tasks: TodoTask[] = tasksPage.value;
+
+    for (const task of tasks) {
+      console.log(
+        `${task.id} ${task.title} ${task.status} ${task.categories} ${task.importance} ${task.startDateTime?.dateTime} ${task.startDateTime?.timeZone}`
+      );
+    }
+  } catch (err) {
+    console.log(`Error get task lists: ${err}`);
+  }
+}
+
+async function displayTaskAsync(taskListID: string, taskID: string) {
+  try {
+    const task = await graphHelper.getTaskAsync(taskListID, taskID);
+    if (task.extensions) console.log(Object.keys(task.extensions[0]));
+    else console.log("No extensions");
+  } catch (err) {
+    console.log(`Error get task: ${err}`);
+  }
+}
+
+async function listCalendarsAsync() {
+  try {
+    const calendarsPage = await graphHelper.getCalendarsAsync();
+    const calendars: Calendar[] = calendarsPage.value;
+    for (const calendar of calendars) {
+      console.log(`${calendar.id} ${calendar.name}`);
+    }
+  } catch (err) {
+    console.log(`Error get calendars: ${err}`);
+  }
+}
+
+async function listEventsAsync(calendarID: string) {
+  try {
+    const eventsPage = await graphHelper.getEventsAsync(calendarID);
+    const events: Event[] = eventsPage.value;
+    for (const event of events) {
+      console.log(`${event.id} ${event.subject}`);
+    }
+  } catch (err) {
+    console.log(`Error get events: ${err}`);
+  }
+}
+
+async function createEventAsync(
+  calendarID: string,
+  subject: string,
+  start: string,
+  end: string,
+  importance: string
+) {
+  try {
+    const newEvent = await graphHelper.createEventAsync(
+      calendarID,
+      subject,
+      start,
+      end,
+      importance
+    );
+    console.log(`Event created with id ${newEvent.id}`);
+  } catch (err) {
+    console.log(`Error create event: ${err}`);
+  }
+}
+
+async function findTodayTasksAsync() {
+  try {
+    const taskListsPage = await graphHelper.getTaskListsAsync();
     const taskLists: TodoTaskList[] = taskListsPage.value;
 
     for (const taskList of taskLists) {
-      console.log(`${taskList.id} ${taskList.displayName}`);
+      const tasksPage = await graphHelper.getTasksAsync(
+        taskList.id ? taskList.id : ""
+      );
+
+      const tasks: TodoTask[] = tasksPage.value;
+      for (const task of tasks) {
+        if (task.status === "notStarted" && task.dueDateTime?.dateTime === "") {
+          console.log(
+            `${task.id} ${task.title} ${task.status} ${task.categories} ${task.importance} ${task.startDateTime?.dateTime} ${task.startDateTime?.timeZone}`
+          );
+        }
+      }
     }
   } catch (err) {
     console.log(`Error get task lists: ${err}`);
