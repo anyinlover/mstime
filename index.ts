@@ -5,7 +5,6 @@
 import * as readline from 'readline-sync';
 import { DeviceCodeInfo } from '@azure/identity';
 import {
-  Message,
   TodoTaskList,
   TodoTask,
   Calendar,
@@ -19,6 +18,7 @@ import * as graphHelper from './graphHelper';
 
 const localTasks: [string, string][] = [];
 let workingIdx: number = -1;
+let defaultListId: string = '';
 
 async function main() {
   console.log('TypeScript Graph Tutorial');
@@ -124,67 +124,6 @@ async function greetUserAsync() {
 }
 // </GreetUserSnippet>
 
-// <DisplayAccessTokenSnippet>
-async function displayAccessTokenAsync() {
-  try {
-    const userToken = await graphHelper.getUserTokenAsync();
-    console.log(`User token: ${userToken}`);
-  } catch (err) {
-    console.log(`Error getting user access token: ${err}`);
-  }
-}
-// </DisplayAccessTokenSnippet>
-
-// <ListInboxSnippet>
-async function listInboxAsync() {
-  try {
-    const messagePage = await graphHelper.getInboxAsync();
-    const messages: Message[] = messagePage.value;
-
-    // Output each message's details
-    for (const message of messages) {
-      console.log(`Message: ${message.subject ?? 'NO SUBJECT'}`);
-      console.log(`  From: ${message.from?.emailAddress?.name ?? 'UNKNOWN'}`);
-      console.log(`  Status: ${message.isRead ? 'Read' : 'Unread'}`);
-      console.log(`  Received: ${message.receivedDateTime}`);
-    }
-
-    // If @odata.nextLink is not undefined, there are more messages
-    // available on the server
-    const moreAvailable = messagePage['@odata.nextLink'] != undefined;
-    console.log(`\nMore messages available? ${moreAvailable}`);
-  } catch (err) {
-    console.log(`Error getting user's inbox: ${err}`);
-  }
-}
-// </ListInboxSnippet>
-
-// <SendMailSnippet>
-async function sendMailAsync() {
-  try {
-    // Send mail to the signed-in user
-    // Get the user for their email address
-    const user = await graphHelper.getUserAsync();
-    const userEmail = user?.mail ?? user?.userPrincipalName;
-
-    if (!userEmail) {
-      console.log("Couldn't get your email address, canceling...");
-      return;
-    }
-
-    await graphHelper.sendMailAsync(
-      'Testing Microsoft Graph',
-      'Hello world!',
-      userEmail,
-    );
-    console.log('Mail sent.');
-  } catch (err) {
-    console.log(`Error sending mail: ${err}`);
-  }
-}
-// </SendMailSnippet>
-
-
 async function listTaskListsAsync() {
   try {
     const taskListsPage = await graphHelper.getTaskListsAsync();
@@ -222,18 +161,6 @@ async function listCalendarsAsync() {
     }
   } catch (err) {
     console.log(`Error get calendars: ${err}`);
-  }
-}
-
-async function listEventsAsync(calendarID: string) {
-  try {
-    const eventsPage = await graphHelper.getEventsAsync(calendarID);
-    const events: Event[] = eventsPage.value;
-    for (const event of events) {
-      console.log(`${event.id} ${event.subject}`);
-    }
-  } catch (err) {
-    console.log(`Error get events: ${err}`);
   }
 }
 
@@ -306,13 +233,12 @@ function calculateTotalDuration(
   }
   // Convert total duration from milliseconds to minutes
   const totalMinutes = totalMilliseconds / (1000 * 60);
-  console.log(text, totalMinutes);
   return totalMinutes;
 }
 
 function extractEstimateTime(text: string): string {
   const lines = text.trim().split('\n');
-  return lines.length ? lines[0] : '';
+  return lines.length ? lines[0] : '0';
 }
 
 function isToday(utcDateStr: string): boolean {
@@ -325,27 +251,13 @@ function isToday(utcDateStr: string): boolean {
   );
 }
 
-function calculateTodayDuration(text: string, isFinished: boolean): number {
-  const lines: string[] = text.split('\n');
-  const totalTodayMinutes = lines
-    .slice(0, isFinished ? lines.length - 1 : lines.length)
-    .reduce((acc, line) => {
-      const [startTimeStr, endTimeStr] = line.split(' ');
-      const startTime = new Date(startTimeStr);
-      const endTime = new Date(endTimeStr);
-      const durationMs = isToday(startTimeStr)
-        ? endTime.getTime() - startTime.getTime()
-        : 0;
-      return acc + durationMs;
-    }, 0);
-  console.log(text, totalTodayMinutes / (1000 * 60));
-  return totalTodayMinutes / (1000 * 60);
-}
-
 async function findTodayTasksAsync() {
   try {
     const taskListsPage = await graphHelper.getTaskListsAsync();
     const taskLists: TodoTaskList[] = taskListsPage.value;
+    defaultListId =
+      taskLists.find((list) => list.wellknownListName === 'defaultList')?.id ??
+      '';
     const midnight = getMidnightUTC();
 
     // Prepare an array of promises
@@ -456,43 +368,76 @@ async function displayTaskAsync() {
 }
 
 async function summaryTheDayAsync() {
-  if (workingIdx >= 0) {
-    console.log(
-      `You're working at ${workingIdx + 1}th task, stop it first before summary the day!`,
+  try {
+    if (workingIdx >= 0) {
+      console.log(
+        `You're working at ${workingIdx + 1}th task, stop it first before summary the day!`,
+      );
+      return;
+    }
+
+    const tasksPromises = localTasks.map(async ([taskListId, taskId]) => {
+      const tasks = await graphHelper.getTaskAsync(taskListId, taskId);
+      return tasks;
+    });
+
+    // Wait for all promises to resolve
+    const allTasks: TodoTask[] = await Promise.all(tasksPromises);
+    const tasksNum: number = allTasks.length;
+    const finishedTasksNum: number = allTasks.filter((task) => {
+      return task.status === 'completed';
+    }).length;
+    const doingTasksNum: number = allTasks.filter((task) => {
+      return task.status === 'inProgress';
+    }).length;
+    const totalMinutes: number = allTasks.reduce((acc, task) => {
+      return (
+        acc +
+        calculateTotalDuration(
+          task.body?.content ? task.body?.content : '',
+          task.status === 'completed',
+          false,
+        )
+      );
+    }, 0);
+    const tasksInfo: string[] = allTasks.map((task) => {
+      return [
+        task.title,
+        task.importance,
+        task.status,
+        extractEstimateTime(task.body?.content ? task.body?.content : ''),
+        calculateTotalDuration(
+          task.body?.content ? task.body?.content : '',
+          task.status === 'completed',
+          false,
+        ),
+        calculateTotalDuration(
+          task.body?.content ? task.body?.content : '',
+          task.status === 'completed',
+          true,
+        ),
+      ].join(' | ');
+    });
+    const summaryInfo = [
+      `Good Job! Today you spent ${totalMinutes} minutes at tasks.`,
+      `Today you have total ${tasksNum} tasks`,
+      `  finished ${finishedTasksNum} tasks`,
+      `  doing ${doingTasksNum} tasks`,
+      `  left ${tasksNum - finishedTasksNum - doingTasksNum} tasks.`,
+      'title | importance | status | estimate time | total duration (today) | total duration (all)',
+      '| --- | --- | --- | --- | --- | --- |',
+    ];
+    summaryInfo.push(...tasksInfo);
+    const summaryText: string = summaryInfo.join('\n');
+    console.log(summaryText);
+    await graphHelper.createTaskAsync(
+      defaultListId,
+      'TodaySummary',
+      summaryText,
+      'inProgress',
+      getMidnightUTC().slice(0, -1),
     );
-    return;
+  } catch (error) {
+    console.error('Error summary today:', error);
   }
-
-  const tasksPromises = localTasks.map(async ([taskListId, taskId]) => {
-    const tasks = await graphHelper.getTaskAsync(taskListId, taskId);
-    return tasks;
-  });
-
-  // Wait for all promises to resolve
-  const allTasks: TodoTask[] = await Promise.all(tasksPromises);
-  const tasksNum: number = allTasks.length;
-  const finishedTasksNum: number = allTasks.filter((task) => {
-    return task.status === 'completed';
-  }).length;
-  const doingTasksNum: number = allTasks.filter((task) => {
-    return task.status === 'inProgress';
-  }).length;
-  const totalMinutes: number = allTasks.reduce((acc, task) => {
-    return (
-      acc +
-      calculateTotalDuration(
-        task.body?.content ? task.body?.content : '',
-        task.status === 'completed',
-        false,
-      )
-    );
-  }, 0);
-  const tasksInfo: string[] = allTasks.map((task) => {
-    const info: string = `${task.title} | ${task.importance} | ${task.status} | ${extractEstimateTime(task.body?.content ? task.body?.content : '')}`;
-  })
-  console.log(`Good Job! Today you spent ${totalMinutes} minutes at tasks.`);
-  console.log(`Today you have total ${tasksNum} tasks\n
-  finished ${finishedTasksNum} tasks\n
-  doing ${doingTasksNum} tasks\n
-  left ${tasksNum - finishedTasksNum - doingTasksNum} tasks.`);
 }

@@ -202,6 +202,7 @@ export async function createTaskAsync(
   if (!_userClient) {
     throw new Error('Graph has not been initialized for user auth');
   }
+
   const task: TodoTask = {
     title: title,
     body: {
@@ -214,7 +215,7 @@ export async function createTaskAsync(
     },
     status: status,
   };
-  return _userClient.api(`me/todo/lists/{todoTaskListId}/tasks`).post(task);
+  return _userClient.api(`me/todo/lists/${taskListID}/tasks`).post(task);
 }
 
 export async function updateTaskAsync(
