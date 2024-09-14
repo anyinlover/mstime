@@ -72,22 +72,8 @@ async function main() {
       case 8:
         await listTaskListsAsync();
         break;
-      case 9:
-        await listTasksAsync(
-          'AQMkADAwATM0MDAAMS1hNDAxLTY3NDMtMDACLTAwCgAuAAAD7VyvLT-NU0qZUjzrHbil7AEAvMe3PvoH7EWY6Ys_baveAQAEZrVURwAAAA==',
-        );
-        break;
       case 7:
         await listCalendarsAsync();
-        break;
-      case 5:
-        await createEventAsync(
-          'AQMkADAwATM0MDAAMS1hNDAxLTY3NDMtMDACLTAwCgBGAAAD7VyvLT-NU0qZUjzrHbil7AcAvMe3PvoH7EWY6Ys_baveAQAAAgEGAAAAvMe3PvoH7EWY6Ys_baveAQAAAjQ8AAAA',
-          'TEST',
-          '2024-09-13T23:00:00',
-          '2024-09-13T24:00:00',
-          'normal',
-        );
         break;
       default:
         console.log('Invalid choice! Please try again.');
@@ -276,10 +262,7 @@ async function findTodayTasksAsync() {
     // Process the tasks
     allTasks.forEach(({ taskList, tasks }) => {
       tasks.forEach((task) => {
-        localTasks.push([
-          taskList.id ? taskList.id : '',
-          task.id ? task.id : '',
-        ]);
+        localTasks.push([taskList.id ?? '', task.id ?? '']);
         console.log(
           `${idx++} | ${taskList.displayName} | ${task.title} | ${task.importance} | ${task.status}`,
         );
@@ -319,7 +302,7 @@ async function startTaskAsync() {
         'Please estimate the total time it need: ',
       )}`;
     }
-    const oldBody: string = task.body?.content?.trim() || '';
+    const oldBody: string = task.body?.content?.trim() ?? '';
     const body: string = `${oldBody}${estimateTime}\n${now}`;
     await graphHelper.updateTaskAsync(taskListId, taskId, body, 'inProgress');
     workingIdx = idx;
@@ -340,7 +323,9 @@ async function stopTaskAsync() {
     const isFinished: boolean =
       readline.question('Have you finished it? ') === 'y';
     const status: TaskStatus = isFinished ? 'completed' : 'inProgress';
-    let body: string = `${task.body?.content?.trim() || ''} ${now}`;
+    const oldBody: string = task.body?.content?.trim() ?? '';
+    const startTimeStr: string = oldBody.split('\n')[-1];
+    let body: string = `${oldBody} ${now}`;
     if (isFinished) {
       body = `${body}\n${calculateTotalDuration(body)}`;
     }
@@ -400,32 +385,48 @@ async function summaryTheDayAsync() {
         )
       );
     }, 0);
+    const headers: string[] = [
+      'title',
+      'importance',
+      'status',
+      'estimate time',
+      'total duration (today)',
+      'total duration (all)',
+    ];
+    const paddings: number[] = [40, 10, 10, 13, 22, 20];
     const tasksInfo: string[] = allTasks.map((task) => {
       return [
-        task.title,
-        task.importance,
-        task.status,
-        extractEstimateTime(task.body?.content ? task.body?.content : ''),
+        task.title?.padEnd(paddings[0], ' '),
+        task.importance?.padEnd(paddings[1], ' '),
+        task.status?.padEnd(paddings[2], ' '),
+        extractEstimateTime(task.body?.content ?? '').padEnd(paddings[3], ' '),
         calculateTotalDuration(
-          task.body?.content ? task.body?.content : '',
+          task.body?.content ?? '',
           task.status === 'completed',
           false,
-        ),
+        )
+          .toFixed(1)
+          .padEnd(paddings[4], ' '),
         calculateTotalDuration(
-          task.body?.content ? task.body?.content : '',
+          task.body?.content ?? '',
           task.status === 'completed',
           true,
-        ),
+        )
+          .toFixed(1)
+          .padEnd(paddings[5], ' '),
       ].join(' | ');
     });
+
     const summaryInfo = [
       `Good Job! Today you spent ${totalMinutes} minutes at tasks.`,
       `Today you have total ${tasksNum} tasks`,
       `  finished ${finishedTasksNum} tasks`,
       `  doing ${doingTasksNum} tasks`,
       `  left ${tasksNum - finishedTasksNum - doingTasksNum} tasks.`,
-      'title | importance | status | estimate time | total duration (today) | total duration (all)',
-      '| --- | --- | --- | --- | --- | --- |',
+      headers
+        .map((header, index) => `${header.padEnd(paddings[index], ' ')}`)
+        .join(' | '),
+      paddings.map((padding) => '-'.repeat(padding)).join(' | '),
     ];
     summaryInfo.push(...tasksInfo);
     const summaryText: string = summaryInfo.join('\n');
