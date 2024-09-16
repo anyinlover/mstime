@@ -15,6 +15,7 @@ import {
   User,
   Message,
   TodoTask,
+  TodoTaskList,
   Event,
   Importance,
   TaskStatus,
@@ -165,6 +166,16 @@ export async function getTaskListsAsync(): Promise<PageCollection> {
   return _userClient.api('me/todo/lists').get();
 }
 
+export async function getTaskListAsync(
+  taskListID: string,
+): Promise<TodoTaskList> {
+  // Ensure client isn't undefined
+  if (!_userClient) {
+    throw new Error('Graph has not been initialized for user auth');
+  }
+  return _userClient.api(`me/todo/lists/${taskListID}`).get();
+}
+
 export async function getTasksAsync(
   taskListID: string,
   filter: string = '',
@@ -222,7 +233,7 @@ export async function updateTaskAsync(
   taskListID: string,
   taskID: string,
   body: string,
-  status: TaskStatus = 'notStarted',
+  status: TaskStatus = 'inProgress',
 ): Promise<TodoTask> {
   // Ensure client isn't undefined
   if (!_userClient) {
@@ -256,17 +267,24 @@ export async function getEventsAsync(
 }
 
 export async function createEventAsync(
-  calendarID: string,
   subject: string,
   start: string,
   end: string,
   importance: Importance,
-) {
+  categories: string[] = [],
+): Promise<Event> {
+  // Ensure client isn't undefined
+  if (!_userClient) {
+    throw new Error('Graph has not been initialized for user auth');
+  }
   const event: Event = {
     subject: subject,
-    start: { dateTime: start, timeZone: 'UTC' },
-    end: { dateTime: end, timeZone: 'UTC' },
+    start: { dateTime: start, timeZone: 'Asia/Shanghai' },
+    end: { dateTime: end, timeZone: 'Asia/Shanghai' },
     importance: importance,
+    categories: categories,
   };
-  return _userClient?.api(`me/calendars/${calendarID}/events`).post(event);
+  return _userClient?.api(`me/calendar/events`).post(event);
 }
+
+//export async function getCategories()

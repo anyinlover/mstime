@@ -12,6 +12,7 @@ import {
   Importance,
   TaskStatus,
 } from '@microsoft/microsoft-graph-types';
+import { format } from 'date-fns';
 
 import settings, { AppSettings } from './appSettings';
 import * as graphHelper from './graphHelper';
@@ -159,7 +160,6 @@ async function createEventAsync(
 ) {
   try {
     const newEvent = await graphHelper.createEventAsync(
-      calendarID,
       subject,
       start,
       end,
@@ -187,7 +187,7 @@ function getMidnightUTC(): string {
 
 function getCurrentTime(): string {
   const now = new Date();
-  return now.toISOString();
+  return format(now, "yyyy-MM-dd'T'HH:mm:ss.SSS");
 }
 
 function calculateTotalDuration(
@@ -239,6 +239,12 @@ function isToday(utcDateStr: string): boolean {
 
 async function findTodayTasksAsync() {
   try {
+    if (workingIdx >= 0) {
+      console.log(
+        'Idx might change after pull, please finish the current task first',
+      );
+      return;
+    }
     const taskListsPage = await graphHelper.getTaskListsAsync();
     const taskLists: TodoTaskList[] = taskListsPage.value;
     defaultListId =
@@ -258,6 +264,8 @@ async function findTodayTasksAsync() {
 
     // Wait for all promises to resolve
     const allTasks = await Promise.all(tasksPromises);
+    // clear the localTasks first
+    localTasks.length = 0;
     let idx = 1;
     // Process the tasks
     allTasks.forEach(({ taskList, tasks }) => {
@@ -317,14 +325,24 @@ async function stopTaskAsync() {
     return;
   }
   try {
+    const now: string = getCurrentTime();
     const [taskListId, taskId] = localTasks[workingIdx];
     const task: TodoTask = await graphHelper.getTaskAsync(taskListId, taskId);
-    const now: string = getCurrentTime();
+    const taskList: TodoTaskList =
+      await graphHelper.getTaskListAsync(taskListId);
+    const listName: string = taskList.displayName ?? '';
     const isFinished: boolean =
       readline.question('Have you finished it? ') === 'y';
     const status: TaskStatus = isFinished ? 'completed' : 'inProgress';
     const oldBody: string = task.body?.content?.trim() ?? '';
-    const startTimeStr: string = oldBody.split('\n')[-1];
+    const startTimeStr: string = oldBody.split('\n').at(-1) ?? '';
+    await graphHelper.createEventAsync(
+      task.title ?? '',
+      startTimeStr,
+      now,
+      task.importance ?? 'normal',
+      [listName],
+    );
     let body: string = `${oldBody} ${now}`;
     if (isFinished) {
       body = `${body}\n${calculateTotalDuration(body)}`;
