@@ -222,7 +222,7 @@ export async function createTaskAsync(
     },
     dueDateTime: {
       dateTime: dueDateTime,
-      timeZone: 'UTZ',
+      timeZone: 'Asia/Shanghai',
     },
     status: status,
   };

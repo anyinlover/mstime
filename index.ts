@@ -7,42 +7,30 @@ import { DeviceCodeInfo } from '@azure/identity';
 import {
   TodoTaskList,
   TodoTask,
-  Calendar,
-  Event,
-  Importance,
   TaskStatus,
 } from '@microsoft/microsoft-graph-types';
-import { format } from 'date-fns';
+import { format, startOfDay } from 'date-fns';
 
 import settings, { AppSettings } from './appSettings';
 import * as graphHelper from './graphHelper';
 
 const localTasks: [string, string][] = [];
+const localTaskInfos: string[] = [];
 let workingIdx: number = -1;
 let defaultListId: string = '';
 
 async function main() {
-  console.log('TypeScript Graph Tutorial');
-
   let choice = 0;
 
   // Initialize Graph
   initializeGraph(settings);
 
-  // Greet the user by name
-  await greetUserAsync();
-
   const choices = [
     'Show my tasks today',
     'Start a task',
     'Stop a task',
-    'List my task',
+    'List a task',
     'Summary today',
-    'List my task lists',
-    'List my tasks',
-    'List my calendars',
-    'List my events',
-    'Add an event',
   ];
 
   while (choice != -1) {
@@ -70,12 +58,6 @@ async function main() {
       case 4:
         await summaryTheDayAsync();
         break;
-      case 8:
-        await listTaskListsAsync();
-        break;
-      case 7:
-        await listCalendarsAsync();
-        break;
       default:
         console.log('Invalid choice! Please try again.');
     }
@@ -97,80 +79,6 @@ function initializeGraph(settings: AppSettings) {
 }
 // </InitializeGraphSnippet>
 
-// <GreetUserSnippet>
-async function greetUserAsync() {
-  try {
-    const user = await graphHelper.getUserAsync();
-    console.log(`Hello, ${user?.displayName}!`);
-    // For Work/school accounts, email is in mail property
-    // Personal accounts, email is in userPrincipalName
-    console.log(`Email: ${user?.mail ?? user?.userPrincipalName ?? ''}`);
-  } catch (err) {
-    console.log(`Error getting user: ${err}`);
-  }
-}
-// </GreetUserSnippet>
-
-async function listTaskListsAsync() {
-  try {
-    const taskListsPage = await graphHelper.getTaskListsAsync();
-    const taskLists: TodoTaskList[] = taskListsPage.value;
-
-    for (const taskList of taskLists) {
-      console.log(`${taskList.id} ${taskList.displayName}`);
-    }
-  } catch (err) {
-    console.log(`Error get task lists: ${err}`);
-  }
-}
-
-async function listTasksAsync(taskListID: string) {
-  try {
-    const tasksPage = await graphHelper.getTasksAsync(taskListID);
-    const tasks: TodoTask[] = tasksPage.value;
-
-    for (const task of tasks) {
-      console.log(
-        `${task.id} ${task.title} ${task.status} ${task.categories} ${task.importance} ${task.startDateTime?.dateTime} ${task.startDateTime?.timeZone}`,
-      );
-    }
-  } catch (err) {
-    console.log(`Error get task lists: ${err}`);
-  }
-}
-
-async function listCalendarsAsync() {
-  try {
-    const calendarsPage = await graphHelper.getCalendarsAsync();
-    const calendars: Calendar[] = calendarsPage.value;
-    for (const calendar of calendars) {
-      console.log(`${calendar.id} ${calendar.name}`);
-    }
-  } catch (err) {
-    console.log(`Error get calendars: ${err}`);
-  }
-}
-
-async function createEventAsync(
-  calendarID: string,
-  subject: string,
-  start: string,
-  end: string,
-  importance: Importance,
-) {
-  try {
-    const newEvent = await graphHelper.createEventAsync(
-      subject,
-      start,
-      end,
-      importance,
-    );
-    console.log(`Event created with id ${newEvent.id}`);
-  } catch (err) {
-    console.log(`Error create event: ${err}`);
-  }
-}
-
 function getMidnightUTC(): string {
   const today = new Date();
 
@@ -183,6 +91,12 @@ function getMidnightUTC(): string {
 
   // Format the date as a string: YYYY-MM-DDTHH:mm:ss.ssssssZ
   return midnight.toISOString();
+}
+
+function getMidnight(): string {
+  const now = new Date();
+  const midnightToday = startOfDay(now);
+  return format(midnightToday, "yyyy-MM-dd'T'HH:mm:ss.SSS");
 }
 
 function getCurrentTime(): string {
@@ -271,6 +185,7 @@ async function findTodayTasksAsync() {
     allTasks.forEach(({ taskList, tasks }) => {
       tasks.forEach((task) => {
         localTasks.push([taskList.id ?? '', task.id ?? '']);
+        localTaskInfos.push(task.title ?? '');
         console.log(
           `${idx++} | ${taskList.displayName} | ${task.title} | ${task.importance} | ${task.status}`,
         );
@@ -288,8 +203,10 @@ async function startTaskAsync() {
     );
     return;
   }
-  const idx: number =
-    Number(readline.question('Which task do you want to start: ')) - 1;
+  const idx: number = readline.keyInSelect(
+    localTaskInfos,
+    'Which task do you want to start: ',
+  );
   if (idx >= localTasks.length || idx < 0) {
     console.log('The idx is out of the range, quit');
     return;
@@ -454,7 +371,7 @@ async function summaryTheDayAsync() {
       'TodaySummary',
       summaryText,
       'inProgress',
-      getMidnightUTC().slice(0, -1),
+      getMidnight(),
     );
   } catch (error) {
     console.error('Error summary today:', error);
