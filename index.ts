@@ -262,7 +262,7 @@ async function stopTaskAsync() {
     );
     let body: string = `${oldBody} ${now}`;
     if (isFinished) {
-      body = `${body}\n${calculateTotalDuration(body)}`;
+      body = `${body}\n${calculateTotalDuration(body).toFixed(1)}`;
     }
     await graphHelper.updateTaskAsync(taskListId, taskId, body, status);
     workingIdx = -1;
