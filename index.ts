@@ -310,16 +310,18 @@ async function summaryTheDayAsync() {
     const doingTasksNum: number = allTasks.filter((task) => {
       return task.status === 'inProgress';
     }).length;
-    const totalMinutes: number = allTasks.reduce((acc, task) => {
-      return (
-        acc +
-        calculateTotalDuration(
-          task.body?.content ? task.body?.content : '',
-          task.status === 'completed',
-          false,
-        )
-      );
-    }, 0);
+    const totalMinutes: string = allTasks
+      .reduce((acc, task) => {
+        return (
+          acc +
+          calculateTotalDuration(
+            task.body?.content ? task.body?.content : '',
+            task.status === 'completed',
+            false,
+          )
+        );
+      }, 0)
+      .toFixed(1);
     const headers: string[] = [
       'title',
       'importance',
@@ -358,6 +360,7 @@ async function summaryTheDayAsync() {
       `  finished ${finishedTasksNum} tasks`,
       `  doing ${doingTasksNum} tasks`,
       `  left ${tasksNum - finishedTasksNum - doingTasksNum} tasks.`,
+      ``,
       headers
         .map((header, index) => `${header.padEnd(paddings[index], ' ')}`)
         .join(' | '),
