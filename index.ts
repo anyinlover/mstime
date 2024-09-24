@@ -9,7 +9,8 @@ import {
   TodoTask,
   TaskStatus,
 } from '@microsoft/microsoft-graph-types';
-import { format, startOfDay } from 'date-fns';
+import { format, startOfDay, isToday } from 'date-fns';
+import { program } from 'commander';
 
 import settings, { AppSettings } from './appSettings';
 import * as graphHelper from './graphHelper';
@@ -124,7 +125,7 @@ function calculateTotalDuration(
     const endTime = new Date(endTimeStr);
 
     // Calculate the difference in milliseconds
-    if (skipFilter || isToday(startTimeStr)) {
+    if (skipFilter || isToday(startTime)) {
       const durationMs = endTime.getTime() - startTime.getTime();
 
       // Add the duration to the total
@@ -138,17 +139,7 @@ function calculateTotalDuration(
 
 function extractEstimateTime(text: string): string {
   const lines = text.trim().split('\n');
-  return lines.length ? lines[0] : '0';
-}
-
-function isToday(utcDateStr: string): boolean {
-  const date = new Date(utcDateStr);
-  const now = new Date();
-  return (
-    date.getFullYear === now.getFullYear &&
-    date.getMonth === now.getMonth &&
-    date.getDay === now.getDay
-  );
+  return lines.length ? lines[0].trim() : '0';
 }
 
 async function findTodayTasksAsync() {
@@ -180,6 +171,7 @@ async function findTodayTasksAsync() {
     const allTasks = await Promise.all(tasksPromises);
     // clear the localTasks first
     localTasks.length = 0;
+    localTaskInfos.length = 0;
     let idx = 1;
     // Process the tasks
     allTasks.forEach(({ taskList, tasks }) => {
@@ -380,3 +372,10 @@ async function summaryTheDayAsync() {
     console.error('Error summary today:', error);
   }
 }
+
+program
+  .version('0.1.0')
+  .description('An commandline tool to manage time using mstodo and mscalendar')
+  .action(async () => {
+    await main();
+  });

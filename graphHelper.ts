@@ -10,7 +10,14 @@ import {
   useIdentityPlugin,
 } from '@azure/identity';
 import { cachePersistencePlugin } from '@azure/identity-cache-persistence';
-import { Client, PageCollection } from '@microsoft/microsoft-graph-client';
+import {
+  Client,
+  PageCollection,
+  AuthenticationHandler,
+  RetryHandler,
+  RetryHandlerOptions,
+  HTTPMessageHandler,
+} from '@microsoft/microsoft-graph-client';
 import {
   User,
   Message,
@@ -60,9 +67,15 @@ export function initializeGraphForUserAuth(
       scopes: settings.graphUserScopes,
     },
   );
+  const authHandler = new AuthenticationHandler(authProvider);
+  const retryHandlerOptions = new RetryHandlerOptions(0.5, 3, () => true);
+  const retryHandler = new RetryHandler(retryHandlerOptions);
+  const httpHandler = new HTTPMessageHandler();
+  authHandler.setNext(retryHandler);
+  retryHandler.setNext(httpHandler);
 
   _userClient = Client.initWithMiddleware({
-    authProvider: authProvider,
+    middleware: authHandler,
   });
 }
 // </UserAuthConfigSnippet>
@@ -286,5 +299,3 @@ export async function createEventAsync(
   };
   return _userClient?.api(`me/calendar/events`).post(event);
 }
-
-//export async function getCategories()
