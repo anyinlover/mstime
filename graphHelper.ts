@@ -296,6 +296,7 @@ export async function createEventAsync(
     end: { dateTime: end, timeZone: 'Asia/Shanghai' },
     importance: importance,
     categories: categories,
+    sensitivity: 'private',
   };
   return _userClient?.api(`me/calendar/events`).post(event);
 }
